@@ -18,20 +18,24 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Download Last 10 Surahs (Fixed Source)
+      - name: Find Video File
+        run: |
+          ls -lh
+          # Auto-rename videoo.mp4 to video.mp4 if needed
+          if [ -f "videoo.mp4" ]; then mv videoo.mp4 video.mp4; fi
+          if [ -f "Video.mp4" ]; then mv Video.mp4 video.mp4; fi
+          if [ -f "video.MP4" ]; then mv video.MP4 video.mp4; fi
+          ls -lh *.mp4
+
+      - name: Download Last 10 Surahs
         run: |
           mkdir -p quran
-          # Using mp3quran.net - reliable server for Afasy
           for n in {94..114}; do
-            echo "Downloading Surah $n"
             curl -L -A "Mozilla/5.0" -o quran/${n}.mp3 https://server8.mp3quran.net/afs/${n}.mp3
             sleep 1
           done
-          ls -lh quran/
-          # Combine all into one long file
           for f in quran/*.mp3; do echo "file '$PWD/$f'" >> mylist.txt; done
           ffmpeg -f concat -safe 0 -i mylist.txt -c copy combined_quran.mp3
-          ls -lh *.mp3
 
       - name: Start 24/7 Stream
         env:

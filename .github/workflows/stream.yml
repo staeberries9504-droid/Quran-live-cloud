@@ -1,0 +1,52 @@
+name: 24/7 Quran Rain Live
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */5 * * *'  # Auto restart every 5 hours
+  push:
+    branches: [ main ]
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300 # 5 hours max
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Download Last 10 Surahs (Copyright-Free)
+        run: |
+          mkdir -p quran
+          # Alafasy - free from EveryAyah.com (public use)
+          # Surah 94 to 114 - Last 10 Surahs (actually last 21, includes 10)
+          for n in {94..114}; do
+            num=$(printf "%03d" $n)
+            curl -L -o quran/${num}.mp3 https://everyayah.com/data/Alafasy_64kbps/${num}.mp3
+          done
+          # Merge into one file with 5 sec silence between
+          printf "file '%s'\n" $(ls quran/*.mp3 | sort) | xargs -I{} echo -e "{}\n" > list.txt
+          # Create combined audio
+          ffmpeg -f concat -safe 0 -i <(for f in quran/*.mp3; do echo "file '$PWD/$f'"; done) -c copy combined_quran.mp3
+          ls -lh
+
+      - name: Start 24/7 Stream
+        env:
+          YT_KEY: ${{ secrets.YT_KEY }}
+        run: |
+          # Loop your videoo.mp4 video + mix its rain audio (70% volume) with Quran audio (100%)
+          ffmpeg -re -stream_loop -1 -i video.mp4 \
+          -stream_loop -1 -i combined_quran.mp3 \
+          -filter_complex "[0:a]volume=0.25[rain];[1:a]volume=1.0[quran];[rain][quran]amix=inputs=2:duration=longest:dropout_transition=3[a]" \
+          -map 0:v -map "[a]" \
+          -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -r 30 -g 60 -b:v 2500k \
+          -c:a aac -b:a 128k -ar 44100 \
+          -f flv rtmp://a.rtmp.youtube.com/live2/$YT_KEY
+
+      - name: Auto-Restart on Fail
+        if: always()
+        run: |
+          echo "Stream ended, GitHub will restart in 5 hours via cron"
